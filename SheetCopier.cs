@@ -1,11 +1,10 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.ComponentModel;
 using System.Collections.Generic;
+using Excel = Microsoft.Office.Interop.Excel;
 
 namespace Kopiarka.Classes
 {
@@ -43,6 +42,8 @@ namespace Kopiarka.Classes
 		
 		private void Copy(IEnumerable<DateTime> dates, IEnumerable<SheetInfo> settings, string source, string dest, bool updateDate, bool overwrite, DoWorkEventArgs e, int total, ref int i)
 		{
+			var excel = updateDate ? OfficeSheetWriter.CreateExcel() : null;
+			
 			foreach (var date in dates)
             {
                 if (CancellationPending) 
@@ -59,23 +60,28 @@ namespace Kopiarka.Classes
 		            	e.Cancel = true;
 		            	break;
 		            }
-                	
-                	Copy(source, dest, sheetInfo, date, updateDate, overwrite);
+
+                    ReportProgress(i * 100 / total);
+                    Copy(source, dest, sheetInfo, date, updateDate, overwrite, excel);
                     i++;
                 }
-				ReportProgress(i*100/total);
             }
+			
+			if (excel != null) excel.Quit();
 		}
 
-        private static void Copy(string source, string dest, SheetInfo sheetInfo, DateTime date, bool updateDate = false, bool overwrite = false)
+        private static void Copy(string source, string dest, SheetInfo sheetInfo, DateTime date, bool updateDate = false, bool overwrite = false, Excel.Application excel = null)
         {
             var sourcePath = sheetInfo.ConstructPath(source);
             var destPath = sheetInfo.ConstructPath(dest, date);
             Directory.CreateDirectory(Path.GetDirectoryName(destPath));
             File.Copy(sourcePath, destPath, overwrite);
 
-            if (updateDate) 
-            	SheetWriter.UpdateDate(date, sheetInfo.Period, destPath, sheetInfo.Password);
+            if (!updateDate) return;
+            
+        	using (var writer = new OfficeSheetWriter(excel, sheetInfo.Period, date, destPath, sheetInfo.Password))
+        		writer.UpdateDate();
+            
         }
        
     }
